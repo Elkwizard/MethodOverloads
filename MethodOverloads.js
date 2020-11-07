@@ -17,18 +17,25 @@ const Overload = (function (_this) {
 		ufloat: _this.defineType(a => typeof a === "number" && a > 0),
 		int: _this.defineType(a => typeof a === "number" && a === Math.floor(a)),
 		uint: _this.defineType(a => typeof a === "number" && a >= 0 && a === Math.floor(a)),
+		byte: _this.defineType(a => typeof a === "number" && a >= 0 && a <= 255 && a === Math.floor(a)),
 		string: _this.type("string"),
+		stringLine: _this.defineType(a => typeof a === "string" && a.split(/\n|\r/g).length === 1),
 		boolean: _this.type("boolean"),
+		undef: _this.type("undefined"),
 		symbol: _this.type("symbol"),
 		func: _this.type(Function),
 		any: _this._type(() => true)
 	};
 
 	_this.computedTypes = {
+		funcArgs: (...types) => _this.defineType(a => _this.overloadExists(a, ...types)),
+		funcArgs2: (...typeLists) => _this.defineType(a => {
+			for (let i = 0; i < typeLists.length; i++) if (!_this.overloadExists(a, ...typeLists[i])) return false;
+			return true;
+		}),
 		floatRange: (min, max) => _this.defineType(a => typeof a === "number" && a >= min && a <= max),
 		intRange: (min, max) => _this.defineType(a => typeof a === "number" && a >= min && a <= max && a === Math.floor(a)),	
 		stringLength: len => _this.defineType(a => typeof a === "string" && a.length === len),
-		funcArgs: (...types) => _this.defineType(a => _this.overloadExists(a, ...types)),
 		stringPattern: regex => _this.defineType(a => typeof a === "string" && regex.test(a)) 
 	};
 
@@ -150,8 +157,14 @@ const Overload = (function (_this) {
 	_arrayRecurse(typeTok, dim = 0) {
 		if (Array.isArray(typeTok)) return this._arrayRecurse(typeTok[0], dim + 1);
 		let type = this.type(typeTok);
-		const arrayType = arg => dim ? (dim--, arrayType(arg[0])) : type(arg);
-		return arrayType;
+		const arrayType = (arg, dim) => {
+			if (!Array.isArray(arg)) return false;
+			if (dim === 1) {
+				for (let i = 0; i < arg.length; i++) if (!type(arg[i])) return false;
+			} else for (let i = 0; i < arg.length; i++) if (!arrayType(arg[i], dim - 1)) return false;
+			return true;
+		};
+		return arg => arrayType(arg, dim);
 	},
 	_isOverloaded(fn) {
 		return fn && fn._isOverloadedFunction === this._symbols.typedFunc;
